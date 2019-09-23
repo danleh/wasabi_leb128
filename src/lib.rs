@@ -96,8 +96,8 @@ macro_rules! impl_leb128_integer {
     }
 }
 
-impl_leb128_integer!(u64);
 impl_leb128_integer!(u32);
+impl_leb128_integer!(u64);
 impl_leb128_integer!(usize);
 impl_leb128_integer!(i32);
 impl_leb128_integer!(i64);
