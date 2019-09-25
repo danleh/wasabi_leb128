@@ -38,6 +38,7 @@ macro_rules! signed {
 
 // Need to write this as a macro, not a generic impl because num_traits are quite lacking, e.g.,
 // there is no "U as T" for primitive integers.
+// TODO can this be written without a macro?
 macro_rules! impl_leb128_integer {
     ($T: ident) => {
         impl<R: io::Read> ReadLeb128<$T> for R {
@@ -49,7 +50,11 @@ macro_rules! impl_leb128_integer {
                 let mut byte = CONTINUATION_BIT;
 
                 while is_set_continuation_bit(byte) {
-                    byte = self.read_u8()?;
+                    // TODO better error message if ErrorKind::UnexpectedEof -> LEB128 unexpected end
+                    byte = self.read_u8().map_err(|e| io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!("unexpected end of LEB128 data after {} bytes read, current value: {}\ncaused by:{}", _bytes_read, value, e)))?;
+
                     // mask off continuation bit from byte and prepend lower 7 bits to value
                     if let Some(high_bits) = ((byte & !CONTINUATION_BIT) as $T).checked_shl(shift) {
                         value |= high_bits;
