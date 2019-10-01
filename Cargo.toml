@@ -5,4 +5,4 @@ authors = ["Daniel Lehmann <daniel.lehmann@crisp-da.de>"]
 edition = "2018"
 
 [dependencies]
-byteorder = "1"
+num-traits = "0.2.8"

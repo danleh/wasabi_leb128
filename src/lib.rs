@@ -2,55 +2,94 @@ use std::error;
 use std::fmt;
 use std::io;
 
-use byteorder::ReadBytesExt;
 use num_traits::*;
 
 #[cfg(test)]
 mod tests;
 
-/* Traits for encoding and decoding Leb128 primitive integers */
+/* Public API of this crate:
+ * - Traits for encoding and decoding types to/from LEB128.
+ * - Custom error type (for errors during parsing LEB128 bytes to Rust types).
+ * - const fn max_bytes<T>().
+ */
 
 pub trait ReadLeb128<T>: io::Read {
-    fn read_leb128(&mut self) -> io::Result<T>;
+    fn read_leb128(&mut self) -> Result<T, ParseLeb128Error>;
 }
 
 pub trait WriteLeb128<T>: io::Write {
-    /// Returns the actual written byte count.
-    fn write_leb128(&mut self, value: T) -> Result<usize, Leb128Error>;
+    /// Returns the number of written bytes, i.e., the length of the LEB128 encoding of value.
+    fn write_leb128(&mut self, value: T) -> io::Result<usize>;
 }
 
 #[derive(Debug)]
-pub enum Leb128Error {
-    Overflow,
-    UnexpectedEof(io::Error),
+pub enum ParseLeb128Error {
+    OverflowTooManyBytes,
+    OverflowExtraBits,
+    UnexpectedEndOfData(io::Error),
     Other(io::Error),
 }
 
-impl fmt::Display for Leb128Error {
+/// Maximum number of bytes of the LEB128 encoding for values of type T.
+pub const fn max_bytes<T>() -> usize {
+    // See https://stackoverflow.com/questions/2745074/fast-ceiling-of-an-integer-division-in-c-c
+    const fn int_div_ceil(x: usize, y: usize) -> usize {
+        1 + ((x - 1) / y)
+    }
+
+    // ceil( bits(T) / 7 non-continuation bits per LEB128 byte )
+    int_div_ceil(std::mem::size_of::<T>() * 8, 7)
+}
+
+/* Implementation of the error type. */
+
+impl fmt::Display for ParseLeb128Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        unimplemented!() // FIXME
+        let s = match self {
+            ParseLeb128Error::OverflowTooManyBytes => "invalid LEB128, had too many bytes",
+            ParseLeb128Error::OverflowExtraBits => "invalid LEB128, invalid extra bits in last byte",
+            ParseLeb128Error::UnexpectedEndOfData(_) => "invalid LEB128, input data ended before parsing full number",
+            ParseLeb128Error::Other(_) => "other error",
+        };
+        f.write_str(s)
     }
 }
 
-impl error::Error for Leb128Error {}
-
-impl From<io::Error> for Leb128Error {
-    fn from(e: io::Error) -> Self {
-        match e.kind() {
-            // TODO better error message, more data?
-            io::ErrorKind::UnexpectedEof => Leb128Error::UnexpectedEof(e),
-            _ => Leb128Error::Other(e),
+impl error::Error for ParseLeb128Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ParseLeb128Error::UnexpectedEndOfData(e) | ParseLeb128Error::Other(e)  => Some(e),
+            _ => None,
         }
     }
 }
 
-/* Trait implementations */
+impl From<io::Error> for ParseLeb128Error {
+    fn from(e: io::Error) -> Self {
+        ParseLeb128Error::Other(e)
+    }
+}
+
+/* Helper functions and constants for clarity. */
+
+/// Checks whether a primitive integer type is signed (not available in num_traits, unfortunately.)
+// TODO This should be a const fn, but it's not possible (yet, let's track const fn progress...).
+// Rust 1.37: "error[E0723]: trait bounds other than `Sized` on const fn parameters are unstable".
+fn is_signed<T: PrimInt>() -> bool {
+    !T::min_value().is_zero()
+}
 
 const CONTINUATION_BIT: u8 = 0x80;
 
 #[inline]
 fn continuation_bit(byte: u8) -> bool {
     byte & CONTINUATION_BIT == CONTINUATION_BIT
+}
+
+/// Mask off the continuation bit from the byte (= extract only the last 7, meaningful LEB128 bits).
+#[inline]
+fn non_continuation_bits(byte: u8) -> u8 {
+    byte & !CONTINUATION_BIT
 }
 
 const SIGN_BIT: u8 = 0x40;
@@ -60,118 +99,129 @@ fn sign_bit(byte: u8) -> bool {
     byte & SIGN_BIT == SIGN_BIT
 }
 
-macro_rules! signed {
-    ($T: ident) => {
-        $T::min_value() != 0
-    };
-}
+/* Trait implementation for all primitive integer types. */
 
-// For inspiration, see
-// Wiki: https://en.wikipedia.org/wiki/LEB128
-// Official DWARF spec, annex C: http://dwarfstd.org/doc/dwarf-2.0.0.pdf
-// LLVM implementation: http://llvm.org/doxygen/LEB128_8h_source.html
-//      NOTE decodesSLEB128 seems to have no overflow checking!?
-//      Only 128bits?
-// V8 implementation: https://github.com/v8/v8/blob/4b9b23521e6fd42373ebbcb20ebe03bf445494f9/src/wasm/decoder.h#L329
-//      NOTE the template-based unrolling!
-//      Signed and unsigned, and different sizes in one function template
-// parity-wasm implementation: https://github.com/paritytech/parity-wasm/blob/master/src/elements/primitives.rs#L35
-// leb128 crate: https://github.com/gimli-rs/leb128
-// WebAssembly spec (for signed vs. unsigned vs. "uninterpreted"): https://webassembly.github.io/spec/core/binary/values.html
-// About shift overflow detection: https://blogs.msdn.microsoft.com/xiangfan/2009/06/13/detect-shift-overflow/
+// For more information about the LEB128 format, see:
+// - Wikipedia: https://en.wikipedia.org/wiki/LEB128
+// - Official DWARF specification, Appendix 4: http://dwarfstd.org/doc/dwarf-2.0.0.pdf
+// - LLVM implementation: http://llvm.org/doxygen/LEB128_8h_source.html
+//   NOTE decodesSLEB128 seems to have no overflow checking!?
+// - V8 implementation: https://github.com/v8/v8/blob/4b9b23521e6fd42373ebbcb20ebe03bf445494f9/src/wasm/decoder.h#L329
+//   NOTE template-based unrolling, handling of signed and unsigned and different sizes in a single
+//   template, proper overflow checks.
+// - parity-wasm implementation: https://github.com/paritytech/parity-wasm/blob/master/src/elements/primitives.rs#L35
+// - leb128 crate: https://github.com/gimli-rs/leb128
+// - WebAssembly spec (for signed vs. unsigned vs. "uninterpreted"): https://webassembly.github.io/spec/core/binary/values.html
 
-// Need to write this as a macro, not a generic impl because num_traits are quite lacking, e.g.,
-// there is no "U as T" for primitive integers.
-// TODO can this be written without a macro?
-macro_rules! impl_leb128_integer {
-    ($T: ident) => {
-        impl<R: io::Read> ReadLeb128<$T> for R {
-            fn read_leb128(&mut self) -> io::Result<$T> {
-                let mut value = 0;
-                // useful if you want to preserve length when encoding this LEB128 again (unused currently though)
-                let mut _bytes_read = 0;
-                let mut shift = 0;
-                let mut byte = CONTINUATION_BIT;
+impl<R, T> ReadLeb128<T> for R
+where
+    R: io::Read,
+    T: PrimInt + 'static,
+    u8: AsPrimitive<T>,
+{
+    fn read_leb128(&mut self) -> Result<T, ParseLeb128Error> {
+        // TODO Should be const, not let because it only depends on T, but Rust doesn't allow it (yet).
+        // Rust 1.37: "error[E0401]: can't use generic parameters from outer function".
+        let bits = std::mem::size_of::<T>() * 8;
 
+        let mut value = T::zero();
+        let mut shift: usize = 0;
+        let mut bytes_read = 0;
+        let mut current_byte = CONTINUATION_BIT;
 
-                const T_size_bits: usize = std::mem::size_of::<$T>() * 8;
-                // see https://stackoverflow.com/questions/2745074/fast-ceiling-of-an-integer-division-in-c-c
-                const fn int_div_ceil(x: usize, y: usize) -> usize {
-                    x/y + (x % y != 0) as usize
-                }
-                const T_max_leb128_bytes: usize = int_div_ceil(T_size_bits, 7);
-//                println!("\nT: {}\nT_size_bits: {}\nT_max_leb128_bytes: {}\n", stringify!($T), T_size_bits, T_max_leb128_bytes);
+        while continuation_bit(current_byte) {
+            current_byte = {
+                let mut buf = [0u8];
+                self.read_exact(&mut buf).map_err(|e| match e.kind() {
+                    // Return custom error if input bytes end before full LEB128 could be parsed.
+                    io::ErrorKind::UnexpectedEof => ParseLeb128Error::UnexpectedEndOfData(e),
+                    _ => ParseLeb128Error::Other(e),
+                })?;
+                buf[0]
+            };
+            bytes_read += 1;
 
-
-                while continuation_bit(byte) {
-                    // TODO better error message if ErrorKind::UnexpectedEof -> LEB128 unexpected end
-                    byte = self.read_u8().map_err(|e| io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                format!("unexpected end of LEB128 data after {} bytes read, current value: {}\ncaused by:{}", _bytes_read, value, e)))?;
-
-                    // mask off continuation bit from byte and prepend lower 7 bits to value
-                    // FIXME checked_shl does actually NOT check for overflow of the shifted value,
-                    // only that the shift-number is smaller than the number of bits of the target type
-                    // NOTE x86 masks off shift > N bits!
-                    let low_bits = (byte & !CONTINUATION_BIT) as $T;
-
-                    // TODO add warning for overflow of shift bits
-
-
-                    let current_byte = shift as usize / 7;
-                    let is_last_byte = current_byte == T_max_leb128_bytes - 1;
-
-//                    println!("byte {:x}\ncurrent_byte {}\nis_last_byte {}", byte, current_byte, is_last_byte);
-
-//                    use num_traits::PrimInt;
-//                    let overflow = is_last_byte && ((low_bits.wrapping_shl(shift)).wrapping_shr(shift)) != low_bits;
-                    let overflow = current_byte > T_max_leb128_bytes;
-
-                    if !overflow {
-                        value |= low_bits.wrapping_shl(shift);
-//                        println!("shift {}\nlow_bits {:x}\n<<    {:x}\n<< >> {:x}\nvalue {:x}\n", shift, low_bits, low_bits.wrapping_shl(shift), low_bits.wrapping_shl(shift).wrapping_shr(shift), value);
-                    } else {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("LEB128 to {} overflow", stringify!($T))));
-                    }
-                    _bytes_read += 1;
-                    shift += 7;
-                }
-
-                if signed!($T) {
-                    let (sign_extend, did_overflow) = (!0 as $T).overflowing_shl(shift);
-                    if sign_bit(byte) && !did_overflow {
-//                    let sign_extend = (!0 as $T).wrapping_shl(shift-7+1);
-//                    if is_set_sign_bit(byte) {
-                        value |= sign_extend;
-                    }
-
-//                    println!("extension bits {:x}, shift {}\nsign extended {:x}", sign_extend, shift, value);
-                }
-
-
-                Ok(value)
+            if bytes_read > max_bytes::<T>() {
+                return Err(ParseLeb128Error::OverflowTooManyBytes);
             }
+
+            let is_last_byte = bytes_read == max_bytes::<T>();
+            if is_last_byte {
+                // The last LEB128 byte has the following structure:
+                // -------------------------
+                // | c | u ... | s | v ... |
+                // -------------------------
+                // Where:
+                // - c = continuation bit.
+                // - u = undefined or "extra bits", which cannot be represented in the target type.
+                // - s = sign bit (only if target type is signed).
+                // - v = the remaining "value bits".
+                // We need to check that:
+                // - For signed types: all u bits are equal to the sign bit s. (The byte must be
+                //   properly sign-extended.)
+                // - For unsigned types: all u bits are 0. (There is no sign bit s.)
+
+                // TODO This should be const (depends on T only), but doesn't work yet, see above.
+                let value_bit_count = bits
+                    // Bits in the LEB128 bytes so far.
+                    - ((max_bytes::<T>() - 1) * 7)
+                    // For signed values, we also check the sign bit, so there is one less value bit.
+                    - if is_signed::<T>() { 1 } else { 0 };
+                // Extract the extra bits and the sign bit (for signed values) from the input byte.
+                let extra_bits_mask = non_continuation_bits(0xffu8 << value_bit_count);
+                let extra_bits = current_byte & extra_bits_mask;
+
+                let extra_bits_empty = if is_signed::<T>() {
+                    // All 0 (positive value) or all 1 (negative value, properly sign-extended).
+                    extra_bits == 0 || extra_bits == extra_bits_mask
+                } else {
+                    extra_bits == 0
+                };
+
+                if !extra_bits_empty {
+                    return Err(ParseLeb128Error::OverflowExtraBits);
+                }
+            }
+
+            // Prepend the extracted bits to value.
+            // The following shift left cannot overflow (= shift amount larger than target type,
+            // which would be an error in Rust), because the previous condition implies it already:
+            //     bytes_read <= max_bytes(T)      // condition that is ensured above
+            // <=> bytes_read <= ceil(bits(T) / 7) // substitute definition of max_bytes
+            // <=> bytes_read < bits(T) / 7 + 1    // forall x: ceil(x) < x + 1, here x = bits(T) / 7
+            // <=> shift / 7 + 1 < bits(T) / 7 + 1 // express bytes_read in terms of shift
+            // <=> shift < bits(T)                 // qed.
+            let new_bits: T = non_continuation_bits(current_byte).as_().shl(shift);
+            value = value.bitor(new_bits);
+
+            shift += 7;
         }
 
-    }
-}
+        // Sign-extend value if:
+        // - type is signed
+        if is_signed::<T>()
+            // - value is negative (= sign bit of last LEB128 byte was set)
+            && sign_bit(current_byte)
+            // - shift amount does not overflow bit-width of target type
+            //   (disallowed in Rust, will panic in debug mode).
+            && shift < bits
+        {
+            let sign_extend = (!T::zero()).shl(shift);
+            value = value.bitor(sign_extend);
+        }
 
-/// Mask off the continuation bit from the byte (= extract only the last 7, meaningful LEB128 bits).
-#[inline]
-fn non_continuation_bits(byte: u8) -> u8 {
-    byte & !CONTINUATION_BIT
+        Ok(value)
+    }
 }
 
 // Combined implementation for signed and unsigned primitive integers.
 impl<W, T> WriteLeb128<T> for W
 where
     W: io::Write,
-    T: PrimInt + AsPrimitive<u8>,
+    T: PrimInt,
+    T: AsPrimitive<u8>,
 {
-    fn write_leb128(&mut self, mut value: T) -> Result<usize, Leb128Error> {
-        let is_negative = value < T::zero();
-        let empty_value = if is_negative { !T::zero() } else { T::zero() };
-
+    fn write_leb128(&mut self, mut value: T) -> io::Result<usize> {
         let mut bytes_written = 0;
         let mut more_bytes = true;
 
@@ -180,7 +230,22 @@ where
             // Shr sign-extends for signed types and is logical shift for unsigned types.
             value = value.shr(7);
 
-            more_bytes = value != empty_value;
+            let done = if is_signed::<T>() {
+                // For signed values:
+                if sign_bit(byte_to_write) {
+                    // If the MSB of the last written byte is set (= the "sign bit") AND
+                    // if remaining value is all 1's (= they are all copies of the sign bit) -> DONE.
+                    value == !T::zero()
+                } else {
+                    // If the MSB of the last written byte is not set:
+                    // then we are done if no more other bits are remaining in value.
+                    value == T::zero()
+                }
+            } else {
+                // For unsigned values: if value == 0, then we wrote all of its bits.
+                value == T::zero()
+            };
+            more_bytes = !done;
             if more_bytes {
                 byte_to_write |= CONTINUATION_BIT;
             }
@@ -193,13 +258,8 @@ where
     }
 }
 
-impl_leb128_integer!(u32);
-impl_leb128_integer!(u64);
-impl_leb128_integer!(usize);
-impl_leb128_integer!(i32);
-impl_leb128_integer!(i64);
-impl_leb128_integer!(isize);
-
-// for testing, can be exhaustively checked for correctness
-impl_leb128_integer!(u16);
-impl_leb128_integer!(i16);
+// TODO Add trait methods:
+// - read_leb128_with_size(&mut self) -> Result<(T, usize), Error>:
+//   Returns the number of read bytes (i.e., the length of the encoding) alongside the value itself.
+// - write_leb128_with_size(&mut self, mut value: T, min_bytes: usize):
+//   Write at least min_bytes LEB128 encoding of T. E.g., for compressed numbers to be back-patchable.
