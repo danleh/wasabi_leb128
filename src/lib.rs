@@ -4,8 +4,10 @@ use std::io;
 
 use num_traits::*;
 
+
 #[cfg(test)]
 mod tests;
+
 
 /* Public API of this crate:
  * - Traits for encoding and decoding types to/from LEB128.
@@ -41,6 +43,7 @@ pub const fn max_bytes<T>() -> usize {
     int_div_ceil(std::mem::size_of::<T>() * 8, 7)
 }
 
+
 /* Implementation of the error type. */
 
 impl fmt::Display for ParseLeb128Error {
@@ -58,7 +61,7 @@ impl fmt::Display for ParseLeb128Error {
 impl error::Error for ParseLeb128Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            ParseLeb128Error::UnexpectedEndOfData(e) | ParseLeb128Error::Other(e)  => Some(e),
+            ParseLeb128Error::UnexpectedEndOfData(e) | ParseLeb128Error::Other(e) => Some(e),
             _ => None,
         }
     }
@@ -69,6 +72,7 @@ impl From<io::Error> for ParseLeb128Error {
         ParseLeb128Error::Other(e)
     }
 }
+
 
 /* Helper functions and constants for clarity. */
 
@@ -98,6 +102,7 @@ const SIGN_BIT: u8 = 0x40;
 fn sign_bit(byte: u8) -> bool {
     byte & SIGN_BIT == SIGN_BIT
 }
+
 
 /* Trait implementation for all primitive integer types. */
 
@@ -197,10 +202,12 @@ where
             };
             bytes_read += 1;
 
+            // if shift >= bits { // same thing, but without using bytes_read
             if bytes_read > max_bytes::<T>() {
                 return Err(ParseLeb128Error::OverflowTooManyBytes);
             }
 
+            // let is_last_byte = shift == (max_bytes::<T>() - 1)*7; // same
             let is_last_byte = bytes_read == max_bytes::<T>();
             if is_last_byte {
                 // The last LEB128 byte has the following structure:
@@ -227,14 +234,16 @@ where
                 let extra_bits_mask = non_continuation_bits(0xffu8 << value_bit_count);
                 let extra_bits = current_byte & extra_bits_mask;
 
-                let extra_bits_empty = if is_signed::<T>() {
-                    // All 0 (positive value) or all 1 (negative value, properly sign-extended).
+                let extra_bits_valid = if is_signed::<T>() {
+                    // For signed types: The extra bits *plus* the sign bit must either be all 0
+                    // (non-negative value) or all 1 (negative value, properly sign-extended).
                     extra_bits == 0 || extra_bits == extra_bits_mask
                 } else {
+                    // For unsigned types: extra bits must be 0.
                     extra_bits == 0
                 };
 
-                if !extra_bits_empty {
+                if !extra_bits_valid {
                     return Err(ParseLeb128Error::OverflowExtraBits);
                 }
             }
@@ -277,7 +286,7 @@ where
     T: PrimInt,
     T: AsPrimitive<u8>,
 {
-    fn write_leb128(&mut self, mut value: T) -> io::Result<usize> {
+    fn write_leb128(&mut self, mut value: T) -> Result<usize, io::Error> {
         let mut bytes_written = 0;
         let mut more_bytes = true;
 

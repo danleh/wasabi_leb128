@@ -94,7 +94,7 @@ macro_rules! detect_overflow {
 
 #[test]
 fn overflow_is_detected_i32_to_i16() {
-    // We cannot exhaustively test all 32bit numbers, so let's pick some special values:
+    // We cannot exhaustively test all 32-bit numbers, so let's pick some special values:
     let values = [
         // Those two overflow because they use more bytes than possible for an i16 (5 instead of max 3).
         i32::MIN,
