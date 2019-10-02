@@ -1,26 +1,43 @@
-//! Read and write the variable length LEB128 number format.
+//! Read and write the variable length [LEB128](https://en.wikipedia.org/wiki/LEB128) number format.
+//! 
+//! LEB128 ("Little Endian Base 128") is used, for example in [DWARF debugging information](http://dwarfstd.org/doc/dwarf-2.0.0.pdf) 
+//! (see Appenix 4 for C pseudo code) and in the [WebAssembly binary format](https://webassembly.github.io/spec/core/binary/values.html).
 //!
-//! See [`ReadLeb128`] and [`WriteLeb128`] traits for examples.
+//! # Example
+//! 
+//! ```
+//! use wasabi_leb128::{ReadLeb128, WriteLeb128};
+//! 
+//! // Vec<u8> as byte-oriented reader/writer.
+//! let mut buf = Vec::new();
+//! 
+//! // Encoding/writing a u16 as an LEB128 byte sequence.
+//! let original_value: u16 = 128;
+//! buf.write_leb128(original_value).unwrap();
+//! assert_eq!(buf, [0x80, 0x01]);
+//! 
+//! // Decoding/reading an LEB128 number back to a u16.
+//! let value: u16 = buf.as_slice().read_leb128().unwrap();
+//! assert_eq!(value, original_value);
+//! ```
+//! 
+//! See [`ReadLeb128`] and [`WriteLeb128`] traits for more information.
+//! 
+//! # Related Work
+//! 
+//! Other open-source implementations of LEB128 numbers:
+//! * LLVM: <http://llvm.org/doxygen/LEB128_8h_source.html>
+//!     * Note that `decodesSLEB128()` seems to have no overflow checking!?
+//! * V8: <https://github.com/v8/v8/blob/4b9b23521e6fd42373ebbcb20ebe03bf445494f9/src/wasm/decoder.h#L329>
+//!     * Note some clever engineering: template-based unrolling, handling of signed and unsigned
+//!   and different sizes in a single template, proper overflow checks.
+//! * `parity-wasm` crate: <https://github.com/paritytech/parity-wasm/blob/556a02a6d2e816044d2e486bf78123a9bc0657f5/src/elements/primitives.rs#L35>
+//! * `leb128` crate: <https://github.com/gimli-rs/leb128>
 //!
-//! LEB128 ("Little Endian Base 128") is used in DWARF debug information and the WebAssembly
-//! binary format.
-//! For more information about LEB128, see:
-//! - Wikipedia: <https://en.wikipedia.org/wiki/LEB128>
-//! - Official DWARF specification, Appendix 4: <http://dwarfstd.org/doc/dwarf-2.0.0.pdf>
-//! - WebAssembly binary format specification (for signed vs. unsigned vs. "uninterpreted"): <https://webassembly.github.io/spec/core/binary/values.html>
-//! - Other implementations:
-//!     * LLVM: <http://llvm.org/doxygen/LEB128_8h_source.html>
-//!         * Note that `decodesSLEB128()` seems to have no overflow checking!?
-//!     * V8: <https://github.com/v8/v8/blob/4b9b23521e6fd42373ebbcb20ebe03bf445494f9/src/wasm/decoder.h#L329>
-//!         * Note some clever engineering: template-based unrolling, handling of signed and unsigned
-//!       and different sizes in a single template, proper overflow checks.
-//!     * `parity-wasm` crate: <https://github.com/paritytech/parity-wasm/blob/556a02a6d2e816044d2e486bf78123a9bc0657f5/src/elements/primitives.rs#L35>
-//!     * `leb128` crate: <https://github.com/gimli-rs/leb128>
-//!
-//! Differences to the existing Rust implementations in `parity-wasm` and `leb128`:
+//! Differences between this crate and existing Rust implementations in `parity-wasm` and `leb128`:
 //! - Available for all primitive integers (not just `u64` or `i64`).
 //! - A single, combined implementation for signed/unsigned and all sizes (thanks to `num_traits`).
-//! - Proper overflow checking for all integer types.
+//! - Proper overflow checking for all target types when parsing.
 //! - (Hopefully:) easy to understand, comments and explanations inline.
 
 use std::error;
