@@ -2,12 +2,14 @@
 
 extern crate test;
 
-use test::Bencher;
 use std::hint::black_box;
+use test::Bencher;
 
 use leb128::{ReadLeb128, WriteLeb128};
 
-const VALUES: [i64; 13] = [-100000, -10000, -1000, -100, -10, -1, 0, 1, 10, 100, 1000, 10000, 100000];
+const VALUES: [i64; 13] = [
+    -100000, -10000, -1000, -100, -10, -1, 0, 1, 10, 100, 1000, 10000, 100000,
+];
 const ITERATIONS: usize = 1_000;
 
 // Use the gimli.rs leb128 crate as a baseline, since it has already been optimized a bit, it seems.
