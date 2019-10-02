@@ -30,10 +30,8 @@ use std::io;
 
 use num_traits::*;
 
-
 #[cfg(test)]
 mod tests;
-
 
 /* Public API of this crate:
  * - Traits for encoding and decoding types to/from LEB128.
@@ -121,7 +119,6 @@ pub const fn max_bytes<T>() -> usize {
     int_div_ceil(std::mem::size_of::<T>() * 8, 7)
 }
 
-
 /* Implementation of the error type. */
 
 impl fmt::Display for ParseLeb128Error {
@@ -155,7 +152,6 @@ impl From<io::Error> for ParseLeb128Error {
     }
 }
 
-
 /* Helper functions and constants for clarity. */
 
 /// Checks whether a primitive integer type is signed (not available in num_traits, unfortunately.)
@@ -184,7 +180,6 @@ const SIGN_BIT: u8 = 0x40;
 fn sign_bit(byte: u8) -> bool {
     byte & SIGN_BIT == SIGN_BIT
 }
-
 
 /* Trait implementation for all primitive integer types. */
 
@@ -340,6 +335,6 @@ where
 
 // TODO Add trait methods:
 // - read_leb128_with_size(&mut self) -> Result<(T, usize), Error>:
-//   Returns the number of read bytes (i.e., the length of the encoding) alongside the value itself.
+//   Returns the number of read bytes (i.e., the length of the original encoding) alongside the value itself.
 // - write_leb128_with_size(&mut self, mut value: T, min_bytes: usize):
 //   Write at least min_bytes LEB128 encoding of T. E.g., for compressed numbers to be back-patchable.
