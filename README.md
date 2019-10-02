@@ -1,5 +1,4 @@
-# wasabi_leb128
-[![build status](https://travis-ci.com/danleh/wasabi_leb128.svg?branch=master)](https://travis-ci.com/danleh/wasabi_leb128)
+# wasabi_leb128 [![build status](https://travis-ci.com/danleh/wasabi_leb128.svg?branch=master)](https://travis-ci.com/danleh/wasabi_leb128)
 
 Read and write the variable length [LEB128](https://en.wikipedia.org/wiki/LEB128) number format. For example:
 
