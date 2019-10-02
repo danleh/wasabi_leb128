@@ -60,6 +60,28 @@ fn roundtrips_i16() {
     }
 }
 
+// Exhaustively test that our encoding is equal to the one from gimli.rs leb128 crate for 16-bit ints.
+
+#[test]
+fn equal_gimli_write_u16() {
+    for u in u16::MIN..=u16::MAX {
+        let our_buf = write_leb128(u);
+        let mut gimli_buf = Vec::new();
+        gimli_leb128::write::unsigned(&mut gimli_buf, u as u64).unwrap();
+        assert_eq!(our_buf, gimli_buf, "\nu: {}", u);
+    }
+}
+
+#[test]
+fn equal_gimli_write_i16() {
+    for i in i16::MIN..=i16::MAX {
+        let our_buf = write_leb128(i);
+        let mut gimli_buf = Vec::new();
+        gimli_leb128::write::signed(&mut gimli_buf, i as i64).unwrap();
+        assert_eq!(our_buf, gimli_buf, "\ni: {}", i);
+    }
+}
+
 // Check for the existence of errors when parsing a LEB128 value that doesn't fit in the target type.
 
 /// Utility macro to check for overflow errors when converting from a wider to a narrow type.
