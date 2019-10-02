@@ -212,12 +212,10 @@ where
             };
             bytes_read += 1;
 
-            // if shift >= bits { // same thing, but without using bytes_read
             if bytes_read > max_bytes::<T>() {
                 return Err(ParseLeb128Error::OverflowTooManyBytes);
             }
 
-            // let is_last_byte = shift == (max_bytes::<T>() - 1)*7; // same
             let is_last_byte = bytes_read == max_bytes::<T>();
             if is_last_byte {
                 // The last LEB128 byte has the following structure:
