@@ -1,3 +1,29 @@
+//! Read and write the variable length LEB128 number format and convert those byte sequences to
+//! Rust's primitive integer types.
+//!
+//! See [`ReadLeb128`] and [`WriteLeb128`] traits for examples.
+//!
+//! LEB128 ("Little Endian Base 128") is used in DWARF debugging information and the WebAssembly
+//! binary format.
+//! For more information about LEB128, see:
+//! - Wikipedia: <https://en.wikipedia.org/wiki/LEB128>
+//! - Official DWARF specification, Appendix 4: <http://dwarfstd.org/doc/dwarf-2.0.0.pdf>
+//! - WebAssembly binary format specification (for signed vs. unsigned vs. "uninterpreted"): <https://webassembly.github.io/spec/core/binary/values.html>
+//! - Other implementations:
+//!     * LLVM: <http://llvm.org/doxygen/LEB128_8h_source.html>
+//!         * Note that `decodesSLEB128()` seems to have no overflow checking!?
+//!     * V8: <https://github.com/v8/v8/blob/4b9b23521e6fd42373ebbcb20ebe03bf445494f9/src/wasm/decoder.h#L329>
+//!         * Note some clever engineering: template-based unrolling, handling of signed and unsigned
+//!       and different sizes in a single template, proper overflow checks.
+//!     * `parity-wasm` crate: <https://github.com/paritytech/parity-wasm/blob/556a02a6d2e816044d2e486bf78123a9bc0657f5/src/elements/primitives.rs#L35>
+//!     * `leb128` crate: <https://github.com/gimli-rs/leb128>
+//!
+//! Differences to the existing implementations in `parity-wasm` and `leb128`:
+//! - Available for all primitive integers (not just `u64` or `i64`).
+//! - A single, combined implementation for signed/unsigned and all sizes (thanks to `num_traits`).
+//! - Proper overflow checking for all target types.
+//! - (Hopefully:) easy to understand, illustrative comments.
+
 use std::error;
 use std::fmt;
 use std::io;
@@ -15,24 +41,76 @@ mod tests;
  * - const fn max_bytes<T>().
  */
 
+/// A trait that extends readers (implementers of the [`io::Read`] trait) with a method to parse
+/// LEB128 encoded primitive integers.
 pub trait ReadLeb128<T>: io::Read {
+    /// Reads an LEB128 encoded integer of type `T` by decoding a sequence of bytes from `self`.
+    ///
+    /// Returns the parsed value, or a [`ParseLeb128Error`] if not successful.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use std::io;
+    /// use leb128::ReadLeb128;
+    ///
+    /// // Wrap the array in an io::Cursor, which implements io::Read.
+    /// let mut buf = io::Cursor::new([0x80, 0x01]);
+    /// let value: u8 = buf.read_leb128().unwrap();
+    /// assert_eq!(value, 128);
+    /// ```
     fn read_leb128(&mut self) -> Result<T, ParseLeb128Error>;
 }
 
+/// A trait that extends writers (implementers of the [`io::Write`] trait) with a method to write
+/// LEB128 encodings of primitive integers.
 pub trait WriteLeb128<T>: io::Write {
-    /// Returns the number of written bytes, i.e., the length of the LEB128 encoding of value.
-    fn write_leb128(&mut self, value: T) -> io::Result<usize>;
+    /// Writes a primitive integer `value` as a variable-length LEB128 byte sequence into `self`.
+    ///
+    /// If successful, it returns the number of bytes written to `self`, i.e., the length of the
+    /// LEB128 encoding of `value`.
+    ///
+    /// Note that there is no specific error type (just the regular [`io::Error`] of the writer)
+    /// for encoding integers to LEB128, because all primitive integer values can always be
+    /// represented as a (wide enough) LEB128 byte sequence.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use leb128::WriteLeb128;
+    ///
+    /// // Vec<u8> implements io::Write.
+    /// let mut buf = Vec::new();
+    /// buf.write_leb128(128u8).unwrap();
+    /// assert_eq!(buf, [0x80, 0x01]);
+    /// ```
+    fn write_leb128(&mut self, value: T) -> Result<usize, io::Error>;
 }
 
+/// Errors while parsing an LEB128 value from an [`io::Read`] reader.
 #[derive(Debug)]
 pub enum ParseLeb128Error {
+    /// The input LEB128 value is larger than can be represented in the target type, because the
+    /// input had too many bytes (i.e., more bytes than [`max_bytes::<T>()`](max_bytes)).
     OverflowTooManyBytes,
+    /// The input LEB128 value is larger than can be represented in the target type, because the
+    /// last byte of the LEB128 sequence contains invalid extra bits.
     OverflowExtraBits,
+    /// The input ended before a full LEB128 value could be parsed.
+    /// The unnamed argument is the underlying [`io::Error`].
     UnexpectedEndOfData(io::Error),
+    /// Any other [`io::Error`] during reading that is not specific to parsing LEB128 values.
     Other(io::Error),
 }
 
-/// Maximum number of bytes of the LEB128 encoding for values of type T.
+/// Maximum number of bytes that the LEB128 encoding of values of type `T` can take.
+///
+/// For example:
+/// ```
+/// assert_eq!(leb128::max_bytes::<u8>(), 2);
+/// assert_eq!(leb128::max_bytes::<i32>(), 5);
+/// assert_eq!(leb128::max_bytes::<u64>(), 10);
+/// ```
 pub const fn max_bytes<T>() -> usize {
     // See https://stackoverflow.com/questions/2745074/fast-ceiling-of-an-integer-division-in-c-c
     const fn int_div_ceil(x: usize, y: usize) -> usize {
@@ -50,8 +128,12 @@ impl fmt::Display for ParseLeb128Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         let s = match self {
             ParseLeb128Error::OverflowTooManyBytes => "invalid LEB128, had too many bytes",
-            ParseLeb128Error::OverflowExtraBits => "invalid LEB128, invalid extra bits in last byte",
-            ParseLeb128Error::UnexpectedEndOfData(_) => "invalid LEB128, input data ended before parsing full number",
+            ParseLeb128Error::OverflowExtraBits => {
+                "invalid LEB128, invalid extra bits in last byte"
+            }
+            ParseLeb128Error::UnexpectedEndOfData(_) => {
+                "invalid LEB128, input data ended before parsing full number"
+            }
             ParseLeb128Error::Other(_) => "other error",
         };
         f.write_str(s)
@@ -106,18 +188,7 @@ fn sign_bit(byte: u8) -> bool {
 
 /* Trait implementation for all primitive integer types. */
 
-// For more information about the LEB128 format, see:
-// - Wikipedia: https://en.wikipedia.org/wiki/LEB128
-// - Official DWARF specification, Appendix 4: http://dwarfstd.org/doc/dwarf-2.0.0.pdf
-// - LLVM implementation: http://llvm.org/doxygen/LEB128_8h_source.html
-//   NOTE decodesSLEB128 seems to have no overflow checking!?
-// - V8 implementation: https://github.com/v8/v8/blob/4b9b23521e6fd42373ebbcb20ebe03bf445494f9/src/wasm/decoder.h#L329
-//   NOTE template-based unrolling, handling of signed and unsigned and different sizes in a single
-//   template, proper overflow checks.
-// - parity-wasm implementation: https://github.com/paritytech/parity-wasm/blob/master/src/elements/primitives.rs#L35
-// - leb128 crate: https://github.com/gimli-rs/leb128
-// - WebAssembly spec (for signed vs. unsigned vs. "uninterpreted"): https://webassembly.github.io/spec/core/binary/values.html
-
+/// Combined implementation for reading LEB128 to signed and unsigned primitive integers.
 impl<R, T> ReadLeb128<T> for R
 where
     R: io::Read,
@@ -133,62 +204,6 @@ where
         let mut shift: usize = 0;
         let mut bytes_read = 0;
         let mut current_byte = CONTINUATION_BIT;
-
-        //        for bytes_read in 0..max_bytes::<T>() {
-        //            current_byte = {
-        //                let mut buf = [0u8];
-        //                self.read_exact(&mut buf)/*.map_err(|e| match e.kind() {
-        //                    // Return custom error if input bytes end before full LEB128 could be parsed.
-        //                    io::ErrorKind::UnexpectedEof => ParseLeb128Error::UnexpectedEndOfData(e),
-        //                    _ => ParseLeb128Error::Other(e),
-        //                })*/?;
-        //                buf[0]
-        //            };
-        //
-        //            let is_last_byte = bytes_read == max_bytes::<T>() - 1;
-        //            if is_last_byte {
-        //                if continuation_bit(current_byte) {
-        //                    return Err(ParseLeb128Error::OverflowTooManyBytes);
-        //                }
-        //
-        //                let value_bit_count = bits
-        //                    // Bits in the LEB128 bytes so far.
-        //                    - ((max_bytes::<T>() - 1) * 7)
-        //                    // For signed values, we also check the sign bit, so there is one less value bit.
-        //                    - if is_signed::<T>() { 1 } else { 0 };
-        //                // Extract the extra bits and the sign bit (for signed values) from the input byte.
-        //                let extra_bits_mask = non_continuation_bits(0xffu8 << value_bit_count);
-        //                let extra_bits = current_byte & extra_bits_mask;
-        //
-        //                let extra_bits_empty = if is_signed::<T>() {
-        //                    // All 0 (positive value) or all 1 (negative value, properly sign-extended).
-        //                    extra_bits == 0 || extra_bits == extra_bits_mask
-        //                } else {
-        //                    extra_bits == 0
-        //                };
-        //
-        //                if !extra_bits_empty {
-        //                    return Err(ParseLeb128Error::OverflowExtraBits);
-        //                }
-        //            }
-        //
-        //            // Prepend the extracted bits to value.
-        //            // The following shift left cannot overflow (= shift amount larger than target type,
-        //            // which would be an error in Rust), because the previous condition implies it already:
-        //            //     bytes_read <= max_bytes(T)      // condition that is ensured above
-        //            // <=> bytes_read <= ceil(bits(T) / 7) // substitute definition of max_bytes
-        //            // <=> bytes_read < bits(T) / 7 + 1    // forall x: ceil(x) < x + 1, here x = bits(T) / 7
-        //            // <=> shift / 7 + 1 < bits(T) / 7 + 1 // express bytes_read in terms of shift
-        //            // <=> shift < bits(T)                 // qed.
-        //            let new_bits: T = non_continuation_bits(current_byte).as_().shl(shift);
-        //            value = value.bitor(new_bits);
-        //
-        //            shift += 7;
-        //
-        //            if !continuation_bit(current_byte) {
-        //                break;
-        //            }
-        //        }
 
         while continuation_bit(current_byte) {
             current_byte = {
@@ -279,7 +294,7 @@ where
     }
 }
 
-// Combined implementation for signed and unsigned primitive integers.
+/// Combined implementation for writing signed and unsigned primitive integers as LEB128.
 impl<W, T> WriteLeb128<T> for W
 where
     W: io::Write,
