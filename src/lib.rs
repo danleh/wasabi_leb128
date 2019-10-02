@@ -1,9 +1,8 @@
-//! Read and write the variable length LEB128 number format and convert those byte sequences to
-//! Rust's primitive integer types.
+//! Read and write the variable length LEB128 number format.
 //!
 //! See [`ReadLeb128`] and [`WriteLeb128`] traits for examples.
 //!
-//! LEB128 ("Little Endian Base 128") is used in DWARF debugging information and the WebAssembly
+//! LEB128 ("Little Endian Base 128") is used in DWARF debug information and the WebAssembly
 //! binary format.
 //! For more information about LEB128, see:
 //! - Wikipedia: <https://en.wikipedia.org/wiki/LEB128>
@@ -18,11 +17,11 @@
 //!     * `parity-wasm` crate: <https://github.com/paritytech/parity-wasm/blob/556a02a6d2e816044d2e486bf78123a9bc0657f5/src/elements/primitives.rs#L35>
 //!     * `leb128` crate: <https://github.com/gimli-rs/leb128>
 //!
-//! Differences to the existing implementations in `parity-wasm` and `leb128`:
+//! Differences to the existing Rust implementations in `parity-wasm` and `leb128`:
 //! - Available for all primitive integers (not just `u64` or `i64`).
 //! - A single, combined implementation for signed/unsigned and all sizes (thanks to `num_traits`).
-//! - Proper overflow checking for all target types.
-//! - (Hopefully:) easy to understand, illustrative comments.
+//! - Proper overflow checking for all integer types.
+//! - (Hopefully:) easy to understand, comments and explanations inline.
 
 use std::error;
 use std::fmt;
@@ -49,11 +48,10 @@ pub trait ReadLeb128<T>: io::Read {
     /// # Example
     ///
     /// ```
-    /// # use std::io;
     /// use leb128::ReadLeb128;
     ///
     /// // Wrap the array in an io::Cursor, which implements io::Read.
-    /// let mut buf = io::Cursor::new([0x80, 0x01]);
+    /// let mut buf = std::io::Cursor::new([0x80, 0x01]);
     /// let value: u8 = buf.read_leb128().unwrap();
     /// assert_eq!(value, 128);
     /// ```
@@ -124,12 +122,14 @@ pub const fn max_bytes<T>() -> usize {
 impl fmt::Display for ParseLeb128Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         let s = match self {
-            ParseLeb128Error::OverflowTooManyBytes => "invalid LEB128, had too many bytes",
+            ParseLeb128Error::OverflowTooManyBytes => {
+                "overflow while parsing LEB128 number, too many bytes"
+            }
             ParseLeb128Error::OverflowExtraBits => {
-                "invalid LEB128, invalid extra bits in last byte"
+                "overflow while parsing LEB128 number, invalid extra bits in last byte"
             }
             ParseLeb128Error::UnexpectedEndOfData(_) => {
-                "invalid LEB128, input data ended before parsing full number"
+                "input data ended before parsed LEB128 number was complete"
             }
             ParseLeb128Error::Other(_) => "other error",
         };
@@ -193,7 +193,7 @@ where
     fn read_leb128(&mut self) -> Result<T, ParseLeb128Error> {
         // TODO Should be const, not let because it only depends on T, but Rust doesn't allow it (yet).
         // Rust 1.37: "error[E0401]: can't use generic parameters from outer function".
-        let bits = std::mem::size_of::<T>() * 8;
+        let bits: usize = std::mem::size_of::<T>() * 8;
 
         let mut value = T::zero();
         let mut shift: usize = 0;
@@ -233,7 +233,7 @@ where
                 // - For unsigned types: all u bits are 0. (There is no sign bit s.)
 
                 // TODO This should be const (depends on T only), but doesn't work yet, see above.
-                let value_bit_count = bits
+                let value_bit_count: usize = bits
                     // Bits in the LEB128 bytes so far.
                     - ((max_bytes::<T>() - 1) * 7)
                     // For signed values, we also check the sign bit, so there is one less value bit.
