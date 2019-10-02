@@ -1,30 +1,30 @@
 //! Read and write the variable length [LEB128](https://en.wikipedia.org/wiki/LEB128) number format.
-//! 
-//! LEB128 ("Little Endian Base 128") is used, for example in [DWARF debugging information](http://dwarfstd.org/doc/dwarf-2.0.0.pdf) 
+//!
+//! LEB128 ("Little Endian Base 128") is used, for example in [DWARF debugging information](http://dwarfstd.org/doc/dwarf-2.0.0.pdf)
 //! (see Appenix 4 for C pseudo code) and in the [WebAssembly binary format](https://webassembly.github.io/spec/core/binary/values.html).
 //!
 //! # Example
-//! 
+//!
 //! ```
 //! use wasabi_leb128::{ReadLeb128, WriteLeb128};
-//! 
+//!
 //! // Vec<u8> as byte-oriented reader/writer.
 //! let mut buf = Vec::new();
-//! 
+//!
 //! // Encoding/writing a u16 as an LEB128 byte sequence.
 //! let original_value: u16 = 128;
 //! buf.write_leb128(original_value).unwrap();
 //! assert_eq!(buf, [0x80, 0x01]);
-//! 
+//!
 //! // Decoding/reading an LEB128 number back to a u16.
 //! let value: u16 = buf.as_slice().read_leb128().unwrap();
 //! assert_eq!(value, original_value);
 //! ```
-//! 
+//!
 //! See [`ReadLeb128`] and [`WriteLeb128`] traits for more information.
-//! 
+//!
 //! # Related Work
-//! 
+//!
 //! Other open-source implementations of LEB128 numbers:
 //! * LLVM: <http://llvm.org/doxygen/LEB128_8h_source.html>
 //!     * Note that `decodesSLEB128()` seems to have no overflow checking!?
