@@ -8,4 +8,4 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - cargo doc --verbose
-  - rustc --version | grep nightly -q && cargo bench
+  - rustc --version | grep nightly -q && cargo bench || true
