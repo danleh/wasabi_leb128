@@ -129,6 +129,62 @@ where
         let mut bytes_read = 0;
         let mut current_byte = CONTINUATION_BIT;
 
+        //        for bytes_read in 0..max_bytes::<T>() {
+        //            current_byte = {
+        //                let mut buf = [0u8];
+        //                self.read_exact(&mut buf)/*.map_err(|e| match e.kind() {
+        //                    // Return custom error if input bytes end before full LEB128 could be parsed.
+        //                    io::ErrorKind::UnexpectedEof => ParseLeb128Error::UnexpectedEndOfData(e),
+        //                    _ => ParseLeb128Error::Other(e),
+        //                })*/?;
+        //                buf[0]
+        //            };
+        //
+        //            let is_last_byte = bytes_read == max_bytes::<T>() - 1;
+        //            if is_last_byte {
+        //                if continuation_bit(current_byte) {
+        //                    return Err(ParseLeb128Error::OverflowTooManyBytes);
+        //                }
+        //
+        //                let value_bit_count = bits
+        //                    // Bits in the LEB128 bytes so far.
+        //                    - ((max_bytes::<T>() - 1) * 7)
+        //                    // For signed values, we also check the sign bit, so there is one less value bit.
+        //                    - if is_signed::<T>() { 1 } else { 0 };
+        //                // Extract the extra bits and the sign bit (for signed values) from the input byte.
+        //                let extra_bits_mask = non_continuation_bits(0xffu8 << value_bit_count);
+        //                let extra_bits = current_byte & extra_bits_mask;
+        //
+        //                let extra_bits_empty = if is_signed::<T>() {
+        //                    // All 0 (positive value) or all 1 (negative value, properly sign-extended).
+        //                    extra_bits == 0 || extra_bits == extra_bits_mask
+        //                } else {
+        //                    extra_bits == 0
+        //                };
+        //
+        //                if !extra_bits_empty {
+        //                    return Err(ParseLeb128Error::OverflowExtraBits);
+        //                }
+        //            }
+        //
+        //            // Prepend the extracted bits to value.
+        //            // The following shift left cannot overflow (= shift amount larger than target type,
+        //            // which would be an error in Rust), because the previous condition implies it already:
+        //            //     bytes_read <= max_bytes(T)      // condition that is ensured above
+        //            // <=> bytes_read <= ceil(bits(T) / 7) // substitute definition of max_bytes
+        //            // <=> bytes_read < bits(T) / 7 + 1    // forall x: ceil(x) < x + 1, here x = bits(T) / 7
+        //            // <=> shift / 7 + 1 < bits(T) / 7 + 1 // express bytes_read in terms of shift
+        //            // <=> shift < bits(T)                 // qed.
+        //            let new_bits: T = non_continuation_bits(current_byte).as_().shl(shift);
+        //            value = value.bitor(new_bits);
+        //
+        //            shift += 7;
+        //
+        //            if !continuation_bit(current_byte) {
+        //                break;
+        //            }
+        //        }
+
         while continuation_bit(current_byte) {
             current_byte = {
                 let mut buf = [0u8];
