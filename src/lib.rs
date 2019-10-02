@@ -48,7 +48,7 @@ pub trait ReadLeb128<T>: io::Read {
     /// # Example
     ///
     /// ```
-    /// use leb128::ReadLeb128;
+    /// use wasabi_leb128::ReadLeb128;
     ///
     /// // Wrap the array in an io::Cursor, which implements io::Read.
     /// let mut buf = std::io::Cursor::new([0x80, 0x01]);
@@ -73,7 +73,7 @@ pub trait WriteLeb128<T>: io::Write {
     /// # Example
     ///
     /// ```
-    /// use leb128::WriteLeb128;
+    /// use wasabi_leb128::WriteLeb128;
     ///
     /// // Vec<u8> implements io::Write.
     /// let mut buf = Vec::new();
@@ -103,9 +103,9 @@ pub enum ParseLeb128Error {
 ///
 /// For example:
 /// ```
-/// assert_eq!(leb128::max_bytes::<u8>(), 2);
-/// assert_eq!(leb128::max_bytes::<i32>(), 5);
-/// assert_eq!(leb128::max_bytes::<u64>(), 10);
+/// assert_eq!(wasabi_leb128::max_bytes::<u8>(), 2);
+/// assert_eq!(wasabi_leb128::max_bytes::<i32>(), 5);
+/// assert_eq!(wasabi_leb128::max_bytes::<u64>(), 10);
 /// ```
 pub const fn max_bytes<T>() -> usize {
     // See https://stackoverflow.com/questions/2745074/fast-ceiling-of-an-integer-division-in-c-c

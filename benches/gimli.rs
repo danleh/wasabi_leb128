@@ -5,7 +5,7 @@ extern crate test;
 use std::hint::black_box;
 use test::Bencher;
 
-use leb128::{ReadLeb128, WriteLeb128};
+use wasabi_leb128::{ReadLeb128, WriteLeb128};
 
 const VALUES: [i64; 13] = [
     -100000, -10000, -1000, -100, -10, -1, 0, 1, 10, 100, 1000, 10000, 100000,

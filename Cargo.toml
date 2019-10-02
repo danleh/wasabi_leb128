@@ -1,5 +1,5 @@
 [package]
-name = "leb128"
+name = "wasabi_leb128"
 version = "0.3.0"
 authors = ["Daniel Lehmann <mail@dlehmann.eu>"]
 edition = "2018"
