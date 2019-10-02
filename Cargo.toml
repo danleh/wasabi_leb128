@@ -9,3 +9,9 @@ gimli_leb128 = { version = "0.2.4", package = "leb128" }
 
 [dependencies]
 num-traits = "0.2.8"
+
+[profile.release]
+lto = true
+
+[profile.bench]
+lto = true
