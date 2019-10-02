@@ -15,7 +15,7 @@ where
 // Test some manually selected values encode to the right LEB128 bytes.
 
 #[test]
-fn known_encodings_unsigned() {
+fn known_encodings_are_correct_unsigned() {
     assert_eq!(write_leb128(0_u32), [0x00]);
     assert_eq!(write_leb128(1_u32), [0x01]);
     assert_eq!(write_leb128(127_u32), [0x7f]);
@@ -24,7 +24,7 @@ fn known_encodings_unsigned() {
 }
 
 #[test]
-fn known_encoding_signed() {
+fn known_encodings_are_correct_signed() {
     assert_eq!(write_leb128(0_i32), [0x00]);
     assert_eq!(write_leb128(1_i32), [0x01]);
     assert_eq!(write_leb128(-1_i32), [0x7f]);
@@ -63,7 +63,7 @@ fn roundtrips_i16() {
 // Exhaustively test that our encoding is equal to the one from gimli.rs leb128 crate for 16-bit ints.
 
 #[test]
-fn equal_gimli_write_u16() {
+fn same_encodings_as_gimli_u16() {
     for u in u16::MIN..=u16::MAX {
         let our_buf = write_leb128(u);
         let mut gimli_buf = Vec::new();
@@ -73,7 +73,7 @@ fn equal_gimli_write_u16() {
 }
 
 #[test]
-fn equal_gimli_write_i16() {
+fn same_encodings_as_gimli_i16() {
     for i in i16::MIN..=i16::MAX {
         let our_buf = write_leb128(i);
         let mut gimli_buf = Vec::new();
@@ -115,7 +115,7 @@ macro_rules! detect_overflow {
 }
 
 #[test]
-fn overflow_is_detected_i32_to_i16() {
+fn overflow_is_detected_some_i32_to_i16() {
     // We cannot exhaustively test all 32-bit numbers, so let's pick some special values:
     let values = [
         // Those two overflow because they use more bytes than possible for an i16 (5 instead of max 3).
@@ -145,7 +145,7 @@ fn overflow_is_detected_i32_to_i16() {
 }
 
 #[test]
-fn overflow_is_detected_u32_to_u16() {
+fn overflow_is_detected_some_u32_to_u16() {
     // Similar to the test case above, just without the negative numbers.
     let values = [
         0,
@@ -163,7 +163,7 @@ fn overflow_is_detected_u32_to_u16() {
 }
 
 #[test]
-fn overflow_is_detected_i16_to_i8() {
+fn overflow_is_detected_all_i16_to_i8() {
     // For 16-bit values, we can test overflow detection exhaustively.
     for i in i16::MIN..=i16::MAX {
         detect_overflow!(i, i16, i8)
@@ -171,7 +171,7 @@ fn overflow_is_detected_i16_to_i8() {
 }
 
 #[test]
-fn overflow_is_detected_u16_to_u8() {
+fn overflow_is_detected_all_u16_to_u8() {
     // Same as above, just for all unsigned 16-bit integers.
     for u in u16::MIN..=u16::MAX {
         detect_overflow!(u, u16, u8)
