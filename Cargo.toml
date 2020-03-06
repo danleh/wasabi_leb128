@@ -4,7 +4,7 @@ version = "0.4.0"
 authors = ["Daniel Lehmann <mail@dlehmann.eu>"]
 
 description = "Read and write the variable length LEB128 number format."
-keywords = ["LEB128", "variable", "length", "DWARF", "WebAssembly"]
+keywords = ["LEB128", "variable length", "DWARF", "WebAssembly"]
 categories = ["encoding", "parser-implementations", "wasm"]
 
 repository = "https://github.com/danleh/wasabi_leb128"
