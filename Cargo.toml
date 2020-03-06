@@ -1,6 +1,6 @@
 [package]
 name = "wasabi_leb128"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Daniel Lehmann <mail@dlehmann.eu>"]
 
 description = "Read and write the variable length LEB128 number format."
