@@ -35,7 +35,7 @@ fn bench_read_ours(bencher: &mut Bencher) {
         vec.write_leb128(i).unwrap();
         bencher.iter(|| {
             for _ in 0..ITERATIONS {
-                let result: i64 = vec.as_slice().read_leb128().unwrap();
+                let result: i64 = vec.as_slice().read_leb128().unwrap().0;
                 black_box(result);
             }
         })

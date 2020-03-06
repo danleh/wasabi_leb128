@@ -40,7 +40,7 @@ fn known_encodings_are_correct_signed() {
 fn roundtrips_u16() {
     for u in u16::MIN..=u16::MAX {
         let buf = write_leb128(u);
-        let u_decode: u16 = buf
+        let (u_decode, _): (u16, _) = buf
             .as_slice()
             .read_leb128()
             .expect("valid u16 should be possible to decode");
@@ -52,7 +52,7 @@ fn roundtrips_u16() {
 fn roundtrips_i16() {
     for i in i16::MIN..=i16::MAX {
         let buf = write_leb128(i);
-        let i_decode: i16 = buf
+        let (i_decode, _): (i16, _) = buf
             .as_slice()
             .read_leb128()
             .expect("valid i16 should be possible to decode");
@@ -84,7 +84,7 @@ fn same_encodings_as_gimli_i16() {
 
 // Check for the existence of errors when parsing a LEB128 value that doesn't fit in the target type.
 
-/// Utility macro to check for overflow errors when converting from a wider to a narrow type.
+/// Utility macro to check for overflow errors when converting from a wider to a narrower type.
 macro_rules! detect_overflow {
     ($original_value: expr, $T: ty, $U: ty) => ({
         // Encode as the wider type.
@@ -92,7 +92,7 @@ macro_rules! detect_overflow {
         let buf = write_leb128(original_value);
 
         // Decode as the narrower type.
-        let decoded_value: Result<$U, _> = buf.as_slice().read_leb128();
+        let decoded_value: Result<($U, _), _> = buf.as_slice().read_leb128();
 
         // If the input value cannot be represented without loss in the target type,
         // read_leb128() should have Err()'d.
@@ -109,7 +109,7 @@ macro_rules! detect_overflow {
                 decoded_value
             );
         } else {
-            assert_eq!(original_value, decoded_value.unwrap() as $T);
+            assert_eq!(original_value, decoded_value.unwrap().0 as $T);
         }
     })
 }

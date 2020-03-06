@@ -17,7 +17,7 @@
 //! assert_eq!(buf, [0x80, 0x01]);
 //!
 //! // Decoding/reading an LEB128 number back to a u16.
-//! let value: u16 = buf.as_slice().read_leb128().unwrap();
+//! let (value, bytes_read): (u16, usize) = buf.as_slice().read_leb128().unwrap();
 //! assert_eq!(value, original_value);
 //! ```
 //!
@@ -60,7 +60,8 @@ mod tests;
 pub trait ReadLeb128<T>: io::Read {
     /// Reads an LEB128 encoded integer of type `T` by decoding a sequence of bytes from `self`.
     ///
-    /// Returns the parsed value, or a [`ParseLeb128Error`] if not successful.
+    /// If successful, it returns the parsed value and the number of bytes consumed from `self`,
+    /// otherwise a [`ParseLeb128Error`].
     ///
     /// # Example
     ///
@@ -69,10 +70,11 @@ pub trait ReadLeb128<T>: io::Read {
     ///
     /// // Wrap the array in an io::Cursor, which implements io::Read.
     /// let mut buf = std::io::Cursor::new([0x80, 0x01]);
-    /// let value: u8 = buf.read_leb128().unwrap();
+    /// let (value, bytes_read): (u8, usize) = buf.read_leb128().unwrap();
     /// assert_eq!(value, 128);
+    /// assert_eq!(bytes_read, 2);
     /// ```
-    fn read_leb128(&mut self) -> Result<T, ParseLeb128Error>;
+    fn read_leb128(&mut self) -> Result<(T, usize), ParseLeb128Error>;
 }
 
 /// A trait that extends writers (implementers of the [`io::Write`] trait) with a method to write
@@ -94,10 +96,11 @@ pub trait WriteLeb128<T>: io::Write {
     ///
     /// // Vec<u8> implements io::Write.
     /// let mut buf = Vec::new();
-    /// buf.write_leb128(128u8).unwrap();
+    /// let bytes_written = buf.write_leb128(128u8).unwrap();
     /// assert_eq!(buf, [0x80, 0x01]);
+    /// assert_eq!(bytes_written, 2);
     /// ```
-    fn write_leb128(&mut self, value: T) -> Result<usize, io::Error>;
+    fn write_leb128(&mut self, value: T) -> io::Result<usize>;
 }
 
 /// Errors while parsing an LEB128 value from an [`io::Read`] reader.
@@ -207,7 +210,7 @@ where
     T: PrimInt + 'static,
     u8: AsPrimitive<T>,
 {
-    fn read_leb128(&mut self) -> Result<T, ParseLeb128Error> {
+    fn read_leb128(&mut self) -> Result<(T, usize), ParseLeb128Error> {
         // TODO Should be const, not let because it only depends on T, but Rust doesn't allow it (yet).
         // Rust 1.37: "error[E0401]: can't use generic parameters from outer function".
         let bits: usize = std::mem::size_of::<T>() * 8;
@@ -300,7 +303,7 @@ where
             value = value.bitor(sign_extend);
         }
 
-        Ok(value)
+        Ok((value, bytes_read))
     }
 }
 
@@ -311,7 +314,7 @@ where
     T: PrimInt,
     T: AsPrimitive<u8>,
 {
-    fn write_leb128(&mut self, mut value: T) -> Result<usize, io::Error> {
+    fn write_leb128(&mut self, mut value: T) -> io::Result<usize> {
         let mut bytes_written = 0;
         let mut more_bytes = true;
 
