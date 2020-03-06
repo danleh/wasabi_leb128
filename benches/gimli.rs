@@ -10,7 +10,7 @@ use wasabi_leb128::{ReadLeb128, WriteLeb128};
 const VALUES: [i64; 13] = [
     -100000, -10000, -1000, -100, -10, -1, 0, 1, 10, 100, 1000, 10000, 100000,
 ];
-const ITERATIONS: usize = 100_000;
+const ITERATIONS: usize = 10_000;
 
 // Use the gimli.rs leb128 crate as a baseline, since it has already been optimized a bit, it seems.
 
