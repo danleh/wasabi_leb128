@@ -51,8 +51,8 @@ mod tests;
 
 /* Public API of this crate:
  * - Traits for encoding and decoding types to/from LEB128.
- * - Custom error type (for errors during parsing LEB128 bytes to Rust types).
  * - const fn max_bytes<T>().
+ * - Custom error type (for errors during parsing LEB128 bytes to Rust types).
  */
 
 /// A trait that extends readers (implementers of the [`io::Read`] trait) with a method to parse
@@ -103,22 +103,6 @@ pub trait WriteLeb128<T>: io::Write {
     fn write_leb128(&mut self, value: T) -> io::Result<usize>;
 }
 
-/// Errors while parsing an LEB128 value from an [`io::Read`] reader.
-#[derive(Debug)]
-pub enum ParseLeb128Error {
-    /// The input LEB128 value is larger than can be represented in the target type, because the
-    /// input had too many bytes (i.e., more bytes than [`max_bytes::<T>()`](max_bytes)).
-    OverflowTooManyBytes,
-    /// The input LEB128 value is larger than can be represented in the target type, because the
-    /// last byte of the LEB128 sequence contains invalid extra bits.
-    OverflowExtraBits,
-    /// The input ended before a full LEB128 value could be parsed.
-    /// The unnamed argument is the underlying [`io::Error`].
-    UnexpectedEndOfData(io::Error),
-    /// Any other [`io::Error`] during reading that is not specific to parsing LEB128 values.
-    Other(io::Error),
-}
-
 /// Maximum number of bytes that the LEB128 encoding of values of type `T` can take.
 ///
 /// For example:
@@ -135,6 +119,22 @@ pub const fn max_bytes<T>() -> usize {
 
     // ceil( bits(T) / 7 non-continuation bits per LEB128 byte )
     int_div_ceil(std::mem::size_of::<T>() * 8, 7)
+}
+
+/// Errors while parsing an LEB128 value from an [`io::Read`] reader.
+#[derive(Debug)]
+pub enum ParseLeb128Error {
+    /// The input LEB128 value is larger than can be represented in the target type, because the
+    /// input had too many bytes (i.e., more bytes than [`max_bytes::<T>()`](max_bytes)).
+    OverflowTooManyBytes,
+    /// The input LEB128 value is larger than can be represented in the target type, because the
+    /// last byte of the LEB128 sequence contains invalid extra bits.
+    OverflowExtraBits,
+    /// The input ended before a full LEB128 value could be parsed.
+    /// The unnamed argument is the underlying [`io::Error`].
+    UnexpectedEndOfData(io::Error),
+    /// Any other [`io::Error`] during reading that is not specific to parsing LEB128 values.
+    Other(io::Error),
 }
 
 /* Implementation of the error type. */
