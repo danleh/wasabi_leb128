@@ -60,6 +60,32 @@ fn roundtrips_i16() {
     }
 }
 
+// Exhaustively test the reported number of bytes read and written.
+
+#[test]
+fn byte_counts_u16() {
+    for u in u16::MIN..=u16::MAX {
+        let mut buf = Vec::new();
+        let bytes_written = buf.write_leb128(u).unwrap();
+        assert_eq!(bytes_written, buf.len());
+
+        let (_, bytes_read): (usize, usize) = buf.as_slice().read_leb128().unwrap();
+        assert_eq!(bytes_read, buf.len());
+    }
+}
+
+#[test]
+fn byte_counts_i16() {
+    for i in i16::MIN..=i16::MAX {
+        let mut buf = Vec::new();
+        let bytes_written = buf.write_leb128(i).unwrap();
+        assert_eq!(bytes_written, buf.len());
+
+        let (_, bytes_read): (i16, usize) = buf.as_slice().read_leb128().unwrap();
+        assert_eq!(bytes_read, buf.len());
+    }
+}
+
 // Exhaustively test that our encoding is equal to the one from gimli.rs leb128 crate for 16-bit ints.
 
 #[test]
